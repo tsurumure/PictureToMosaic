@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+    body { width: 400px; }
+    body, input, button { font-size: 24px; }
+    #img { display: block; }
+    #canvas { display: none; }
+    .colors { margin-bottom: 20px; }
+    .colors > div { float: left; width: 30px; height: 30px; margin: 0 5px 8px; cursor: pointer; }
+    .clearfix:after { content: "." ; display: block ; height: 0 ; clear: both ; visibility: hidden ; }
+    </style>
+</head>
+<body>
+    <img src="/img/1.jpg" id="img">
+    <canvas id="canvas" data-src="/img/1.jpg" width="400" height="400"></canvas>
+    
+    <br>
+    <div class="colors clearfix" id="colors1"></div>
+
+    <p>颜色的个数：</p>
+    <p><input type="number" value="5" id="cCount"></input></p>
+    <button id="btn_changeRGB">change RGB!</button>
+
+</body>
+</html>
+
+<link rel="stylesheet" href="/js/colpick/css/colpick.css">
+<script src="/js/jquery.min.js"></script>
+<script src="/js/colpick/js/colpick.js"></script>
+<script src="/js/color-thief/color-thief.umd.js"></script>
+
+<script>
+const mosaicImage = (target, mosaicSize = 20, colorCount) => {
+
+    let canvas = document.getElementById(target),
+        _canvas = document.createElement('canvas');
+
+    if (!canvas || !canvas.getContext) {
+
+        return false;
+
+    }
+
+    /**
+        * 根据图片填充马赛克块
+        */
+    const createMosaic = (context, width, height, size, data, cGroup, cGroup_orign) => {
+
+        // console.log('cGroup_orign: ' + cGroup_orign)
+        // console.log('cGroup: ' + cGroup)
+
+        let i = 0
+        for (let y = 0; y < height; y += size) {
+            for (let x = 0; x < width; x += size) {
+                i++;
+                /**
+                    * 取出像素的r,g,b,a值
+                    */
+                let cR = data.data[(y * width + x) * 4],
+                    cG = data.data[(y * width + x) * 4 + 1],
+                    cB = data.data[(y * width + x) * 4 + 2];
+
+                // console.log(`cR:${cR}, cG:${cG}, cB:${cB}`)
+                if (cGroup) {
+                    cGroup.forEach(function(c, cIndex) {
+                        if (Math.abs(cR - c[0]) < 255/colorCount &&
+                            Math.abs(cG - c[1]) < 255/colorCount &&
+                            Math.abs(cB - c[2]) < 255/colorCount)
+                        {
+                            cR = c[0]; cG = c[1]; cB = c[2];
+                        }
+                    })
+
+                }
+
+
+                context.fillStyle = `rgb(${cR},${cG},${cB})`;
+                context.fillRect(x, y, x + size, y + size);
+                context.fillStyle = "#000000"
+                context.fillText(i, x, y + 10)
+            }
+
+        }
+
+
+
+    };
+
+    /**
+        * 将数据画到canvas
+        */
+    const draw = (_context, imageData, context, cGroup, cGroup_orign) => {
+        
+        createMosaic(_context, _canvas.width, _canvas.height, mosaicSize, imageData, cGroup, cGroup_orign);
+        context.drawImage(_canvas, 0, 0);
+
+    };
+
+
+    const init = (colorCount) => {
+
+        let context = canvas.getContext('2d');
+
+        /**
+            * 设置图片来源
+            */
+        let img = new Image();
+        img.src = canvas.getAttribute('data-src');
+        /**
+            * 加载图片
+            */
+        img.onload = () => {
+            let _context = _canvas.getContext('2d'),
+                imageData;
+
+            // [插件] color-thief 获得 n 个颜色值
+            const colorThief = new ColorThief()
+            const cGroup = colorThief.getPalette(img, colorCount)
+            let cGroup_orign = ''
+
+            // console.log(cGroup_orign)
+            // console.log(cGroup)
+
+            var DOM_colors = ''
+            cGroup.forEach(function(c) {
+                // DOM_colors += '<div class="c" rgb="' + '" style="background:rgb(' + c[0] + ', ' + c[1] + ', ' + c[2] + ')"></div>'
+                DOM_colors += `<div class="c" rgb='{ "r":${c[0]}, "g": ${c[1]}, "b": ${c[2]} }' style="background:rgb(${c[0]}, ${c[1]}, ${c[2]})"></div>`
+            })
+            document.querySelector('#colors1').innerHTML = DOM_colors
+
+            // [插件] colpick 颜色选择器
+            $('#colors1 .c').each(function(i, item) {
+                $(item).colpick({
+                    onShow: function () {
+                        cGroup_orign = JSON.parse(JSON.stringify(cGroup))
+                    },
+                    onSubmit: function (HSB, HEX, RGB) {
+                        cGroup[i][0] = RGB.r
+                        cGroup[i][1] = RGB.g
+                        cGroup[i][2] = RGB.b
+                        console.log(cGroup[i][0], cGroup[i][1], cGroup[i][2])
+                        console.log(cGroup)
+                        draw(_context, imageData, context, cGroup, cGroup_orign);
+                        //
+                        $(item).css('background', `rgb(${RGB.r},${RGB.g},${RGB.b})`)
+                        $(item).colpickHide()
+                    }
+                })
+                $(item).colpickSetColor(JSON.parse($(item).attr('rgb')))
+            })
+            $('#colors1 .c').on('click', function() {
+                $(this).colpick();
+            })
+
+            /**
+                * 图片大小与canvas匹配
+                */
+            _canvas.width = img.width;
+            _canvas.height = img.height;
+
+            /**
+                * 重置canvas画布大小
+                */
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            _context.drawImage(img, 0, 0);
+
+            /**
+                * 获取canvas各像素的颜色信息
+                * 像素的颜色信息从左到右,r, g, b, a 值排列
+                */
+            imageData = _context.getImageData(0, 0, _canvas.width, _canvas.height);
+
+            if (colorCount) {
+                draw(_context, imageData, context, cGroup);
+            } else {
+                draw(_context, imageData, context);
+            }
+
+        };
+
+    };
+    init(colorCount);
+
+};
+
+/**
+* div对象, 及马赛克大小
+*/
+
+document.querySelector('#btn_changeRGB').onclick = function () {
+    
+    var color_count = parseInt(document.querySelector('#cCount').value)
+    if (color_count < 2) {
+        alert('数量必须大于2 !')
+    } else {
+        document.querySelector('#img').style.display = 'none'
+        document.querySelector('#canvas').style.display = 'block'
+        mosaicImage('canvas', 20, color_count);
+    }
+    
+}
+</script>
