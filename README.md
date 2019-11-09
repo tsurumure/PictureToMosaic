@@ -1,1 +1,3 @@
 # PictureToMosaic
+
+![](/display/pic.gif)
